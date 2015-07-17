@@ -1,19 +1,20 @@
 #!/usr/bin/python
 
-import sys
+import sys, re, urllib2
 from string import maketrans
 
-ident = 2
-json = {}
-yaml = '''---
+ident = 2 # set identation
+num = re.compile(r'\d+\.?\d*') # compile cypher-like regex
+strip_out = '\"\' ' # strip out quotes and white-spaces
+
+# for test purpose
+yaml_temp = '''---
 foo: "bar"
 baz:
   - "qux"
   - "quxx"
 corge: null
-grault: 1
-# gggg
-
+grault: 5
 garply: true
 waldo: "false"
 fred: "undefined"
@@ -21,47 +22,57 @@ emptyArray: []
 emptyObject: {}
 emptyString: ""'''
 
-# convert string to list by new-lines
-yaml_temp = yaml.split('\n')
+# open an URL
+response = urllib2.urlopen('https://gist.githubusercontent.com/dmitrypa/ee74d809505bf6c69f6f/raw/01e84c2bcb791153346b57cca4e4d2751b8ca111/example.yml')
+yaml_temp = response.read()
+
+# convert string to list delimited by new-lines
+yaml_temp = yaml_temp.split('\n')
 # check if it's YAML
 if yaml_temp.pop(0) != '---':
     print("It's not YAML multi-document file")
     sys.exit()
 
+# wipe out comments and empty lines
 yaml = []
 for i in yaml_temp:
     if not (i == '' or i.startswith('#')):
         yaml.append(i)
 del yaml_temp
 
-def spec_values():
-    pass
-
+json = {}
+# iterate over list
 for i in range(len(yaml)):
+    # it's the list element if indented and started with '- '
     if yaml[i].startswith(ident * ' ' + "- "):
-        val = yaml[i].strip('- \"\'')
-        json[dict_key].append(val)
-    elif yaml[i] != '\n':
+        val = yaml[i].strip('-' + strip_out)
+        json[dict_key].append(val) # append to anchored dict key
+    else: # create item in the json dict
         pair = yaml[i].split(':')
-        key = pair[0].strip('\"\' ')
-        val = pair[1].strip('\"\' ')
-        dict_key = key
-        if len(pair[1]) == 0:
+        key = pair[0].strip(strip_out)
+        val = pair[1].strip(strip_out)
+        dict_key = key # anchor for last created dict key with empty list
+        if len(val) == 0:
             json[key] = []
-        elif val == '{}':
+        elif val == '{}': # preserve dictionary type
             json[key] = dict()
-        elif val == '[]':
+        elif val == '[]': # preserve list type
             json[key] = list()
-        elif val.isdigit():
-            json[key] = int(val)
-        elif val == '\'\'' or val == '\"\"':
+        elif num.search(val): # preserve int or float type
+            if float(val) % 1 == 0:
+                val = int(val)
+            else:
+                val = float(val)
+            json[key] = val
+        elif val == '\'\'' or val == '\"\"': # preserve string type
             json[key] = str()
         else:
-            json[key] = pair[1].strip('\"\' ')
-
-# print json
-# sys.exit()
+            json[key] = val
 
 # Strings should be wrapped in double quotes
-trantab = maketrans("'", '"')
-print str(json).translate(trantab)
+trantab = maketrans("'", '"') # create translation table
+json = str(json).translate(trantab)
+
+# print out tthe file
+with open('gett.json', 'w') as file:
+    file.write(json)
